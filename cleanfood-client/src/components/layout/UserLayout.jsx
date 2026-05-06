@@ -59,6 +59,23 @@ const UserLayout = ({ children }) => {
     }
   };
 
+  const isPromotionActive = (product) => {
+    if (Number(product?.discountPercent) <= 0) return false;
+    const today = new Date().toISOString().slice(0, 10);
+    const start = product.promotionStartDate;
+    const end = product.promotionEndDate;
+    if (start && today < start) return false;
+    if (end && today > end) return false;
+    return true;
+  };
+
+  const getDisplayPrice = (product) => {
+    if (isPromotionActive(product) && Number(product?.discountedPrice) > 0) {
+      return Number(product.discountedPrice);
+    }
+    return Number(product?.price || 0);
+  };
+
   useEffect(() => {
     fetchCart();
   }, [fetchCart]);
@@ -165,6 +182,9 @@ const UserLayout = ({ children }) => {
                           const imgUrl = item.product?.images?.[0]?.url
                             ? `http://localhost:8080${item.product.images[0].url}`
                             : 'https://images.unsplash.com/photo-1543362906-acfc16c67564?auto=format&fit=crop&q=80&w=200';
+                          const unitPrice = getDisplayPrice(item.product);
+                          const originalPrice = Number(item.product?.price || 0);
+                          const hasDiscount = isPromotionActive(item.product) && unitPrice < originalPrice;
                           return (
                             <div key={item.id} className="px-4 py-3 border-b border-slate-100 last:border-b-0 flex items-center gap-3">
                               <img src={imgUrl} alt={item.product?.name || 'San pham'} className="w-10 h-10 rounded-lg object-cover border border-slate-200" />
@@ -193,7 +213,14 @@ const UserLayout = ({ children }) => {
                                   </button>
                                 </div>
                               </div>
-                              <p className="text-sm font-bold text-emerald-600">{(item.product?.price * item.quantity).toLocaleString()} d</p>
+                              <div className="text-right shrink-0">
+                                {hasDiscount && (
+                                  <p className="text-[11px] font-semibold text-slate-400 line-through">
+                                    {(originalPrice * item.quantity).toLocaleString()} d
+                                  </p>
+                                )}
+                                <p className="text-sm font-bold text-emerald-600">{(unitPrice * item.quantity).toLocaleString()} d</p>
+                              </div>
                             </div>
                           );
                         })

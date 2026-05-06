@@ -17,17 +17,20 @@ import java.util.Map;
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 public class CustomerOrderController {
-
     private final OrderService orderService;
     private final UserRepository userRepository;
-
     @GetMapping("/my-orders")
     public ResponseEntity<List<Order>> getMyOrders(Authentication authentication) {
         User user = userRepository.findByUsername(authentication.getName())
                 .orElseThrow(() -> new RuntimeException("User not found"));
         return ResponseEntity.ok(orderService.getOrdersByUser(user));
     }
-
+    @PutMapping("/{id}/cancel")
+    public ResponseEntity<Order> cancelOrder(Authentication authentication, @PathVariable Long id) {
+        User user = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        return ResponseEntity.ok(orderService.cancelOrder(user, id));
+    }
     @PostMapping("/create-cod-order")
     public ResponseEntity<?> createCodOrder(
             Authentication authentication,

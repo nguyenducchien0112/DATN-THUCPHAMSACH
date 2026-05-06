@@ -102,7 +102,7 @@ const ProductManagement = () => {
         category: { id: categories[0]?.id || '' },
         description: '',
         origin: '',
-        unit: 'Kg'
+        unit: ''
       });
       setExistingImages([]);
       setRemovedImageIds([]);
@@ -147,7 +147,7 @@ const ProductManagement = () => {
       promotionEndDate: formData.promotionEndDate || null,
       stockQuantity: Number(formData.stockQuantity) || 0,
       origin: formData.origin?.trim() || '',
-      unit: formData.unit,
+      unit: formData.unit?.trim() || '',
       category: { id: Number(formData.category?.id) }
     };
 
@@ -530,18 +530,14 @@ const ProductManagement = () => {
                    </div>
                    <div className="space-y-1.5">
                       <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest pl-1">Đơn vị tính</label>
-                      <select 
+                      <input
+                        type="text"
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all"
+                        placeholder="VD: Kg, Túi, Hộp, Bó..."
                         value={formData.unit}
                         onChange={(e) => setFormData({...formData, unit: e.target.value})}
                         required
-                      >
-                         <option value="Kg">Kg</option>
-                         <option value="Bó">Bó</option>
-                         <option value="Túi">Túi</option>
-                         <option value="Quả">Quả</option>
-                         <option value="Hộp">Hộp</option>
-                      </select>
+                      />
                    </div>
                 </div>
 

@@ -19,6 +19,10 @@ import CartPage from './pages/CartPage';
 import PaymentResultPage from './pages/PaymentResultPage';
 import OrderHistoryPage from './pages/OrderHistoryPage';
 import ProfilePage from './pages/ProfilePage';
+import AboutPage from './pages/AboutPage';
+import ShippingPolicyPage from './pages/ShippingPolicyPage';
+import ContactPage from './pages/ContactPage';
+import FaqPage from './pages/FaqPage';
 import useAuth from './stores/useAuth';
 
 // Admin Protected Route
@@ -52,6 +56,10 @@ function App() {
         <Route path="/payment-result" element={<CustomerRoute><PaymentResultPage /></CustomerRoute>} />
         <Route path="/my-orders" element={<CustomerRoute><OrderHistoryPage /></CustomerRoute>} />
         <Route path="/profile" element={<CustomerRoute><ProfilePage /></CustomerRoute>} />
+        <Route path="/about" element={<CustomerRoute><AboutPage /></CustomerRoute>} />
+        <Route path="/policy" element={<CustomerRoute><ShippingPolicyPage /></CustomerRoute>} />
+        <Route path="/contact" element={<CustomerRoute><ContactPage /></CustomerRoute>} />
+        <Route path="/faq" element={<CustomerRoute><FaqPage /></CustomerRoute>} />
 
         {/* Auth Routes */}
         <Route path="/login" element={<LoginPage />} />

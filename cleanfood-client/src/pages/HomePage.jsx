@@ -1,8 +1,7 @@
-﻿import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, MapPin, ArrowRight, ShieldCheck, Truck, Clock } from 'lucide-react';
+import { ShoppingCart, MapPin, ArrowRight, ArrowLeft, ShieldCheck, Truck, Clock, Flame, Heart } from 'lucide-react';
 import api from '../lib/axios';
-import useAuth from '../stores/useAuth';
 import useCart from '../stores/useCart';
 import toast from 'react-hot-toast';
 
@@ -115,16 +114,75 @@ const ProductCard = ({ product, onAddToCart, adding }) => (
       </div>
     </div>
   </div>
-);
+  );
+
+const PromoProductCard = ({ product, onAddToCart, adding }) => {
+  const originalPrice = Number(product.price || 0);
+  const displayPrice = Number(getDisplayPrice(product) || 0);
+  const saving = Math.max(0, originalPrice - displayPrice);
+  const discountPercent = originalPrice > 0 ? Math.round((saving / originalPrice) * 10000) / 100 : 0;
+  const imageUrl = product.images && product.images.length > 0
+    ? `http://localhost:8080${product.images[0].url}`
+    : 'https://images.unsplash.com/photo-1543362906-acfc16c67564?auto=format&fit=crop&q=80&w=600';
+
+  return (
+    <div className="h-full bg-white border border-white/70 overflow-hidden flex flex-col">
+      <Link to={`/products/${product.id}`} className="relative block h-52 bg-white">
+        <img src={imageUrl} alt={product.name} className="w-full h-full object-contain p-4" />
+        {saving > 0 && (
+          <div className="absolute left-4 bottom-0 translate-y-1/2 bg-violet-600 text-white rounded-tl-md rounded-br-md px-2.5 py-1.5 leading-tight shadow-sm">
+            <p className="text-[10px] font-black uppercase">Tiết kiệm</p>
+            <p className="text-sm font-black">{saving.toLocaleString()} đ</p>
+          </div>
+        )}
+      </Link>
+
+      <div className="p-4 pt-7 flex-1 flex flex-col">
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div>
+            <p className="text-xs font-black text-slate-400 uppercase tracking-wide mb-2">Đang cập nhật</p>
+            <Link to={`/products/${product.id}`} className="block text-sm font-medium text-slate-700 line-clamp-2 min-h-[40px] hover:text-emerald-700">
+              {product.name}
+            </Link>
+          </div>
+          <button type="button" className="text-emerald-700 hover:text-rose-500 transition-colors" title="Yêu thích">
+            <Heart className="w-5 h-5" />
+          </button>
+        </div>
+
+        <p className="text-xs font-medium text-slate-400 mt-5 mb-2">Đơn vị tính: {product.unit || 'Kg'}</p>
+        <p className="text-lg font-black text-emerald-700">{displayPrice.toLocaleString()} đ</p>
+        <div className="flex items-center gap-2 min-h-[20px]">
+          {saving > 0 && (
+            <>
+              <span className="text-xs text-slate-400 line-through">{originalPrice.toLocaleString()} đ</span>
+              <span className="text-xs font-medium text-rose-500">-{discountPercent.toLocaleString('vi-VN')}%</span>
+            </>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onAddToCart(product)}
+          disabled={adding || Number(product.stockQuantity) <= 0}
+          className="mt-auto w-full h-9 border border-emerald-700 text-emerald-700 rounded font-bold text-sm hover:bg-emerald-700 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {Number(product.stockQuantity) <= 0 ? 'Hết hàng' : 'Thêm vào giỏ'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const HomePage = () => {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
-  const { fetchCart, addToCart } = useCart();
+  const { addToCart } = useCart();
   const [products, setProducts] = useState([]);
   const [promotionProducts, setPromotionProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [addingProductId, setAddingProductId] = useState(null);
+  const promotionScrollerRef = useRef(null);
 
   const categoryStyles = {
     'Rau củ quả': {
@@ -173,7 +231,7 @@ const HomePage = () => {
         ]);
         const allProducts = prodRes.data || [];
         setProducts(sortNewestProducts(allProducts).slice(0, 4));
-        setPromotionProducts(allProducts.filter(isPromotionActive).slice(0, 4));
+        setPromotionProducts(allProducts.filter(isPromotionActive));
         setCategories(catRes.data.slice(0, 4));
       } catch (err) {
         console.error(err);
@@ -187,18 +245,23 @@ const HomePage = () => {
   const handleAddToCart = async (product) => {
     setAddingProductId(product.id);
     try {
-      if (!isAuthenticated) {
-        await addToCart(product.id, 1, product);
-      } else {
-        await api.post(`/cart/add?productId=${product.id}&quantity=1`);
-        await fetchCart();
-      }
+      await addToCart(product.id, 1, product);
       toast.success('Đã thêm sản phẩm vào giỏ hàng');
     } catch (err) {
       toast.error('Thêm vào giỏ hàng thất bại');
     } finally {
       setAddingProductId(null);
     }
+  };
+
+  const scrollPromotionProducts = (direction) => {
+    const scroller = promotionScrollerRef.current;
+    if (!scroller) return;
+    const scrollAmount = Math.min(scroller.clientWidth, 1100);
+    scroller.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth'
+    });
   };
 
   return (
@@ -239,28 +302,58 @@ const HomePage = () => {
       </div>
 
       {promotionProducts.length > 0 && (
-        <div className="mb-20">
-          <div className="flex justify-between items-end mb-10">
-            <div>
-              <h2 className="text-3xl font-black text-slate-800 tracking-tight">Sản phẩm khuyến mãi</h2>
-              <p className="text-slate-500 font-medium">Những mặt hàng tốt nhất được chuyên gia khuyên dùng</p>
-            </div>
-            <Link to="/products" className="flex items-center gap-2 text-emerald-600 font-black text-sm hover:translate-x-1 transition-all">
+        <section className="mb-20 rounded-xl overflow-hidden bg-[#f7b733] border border-amber-300 relative">
+          <div
+            className="absolute inset-0 opacity-20 pointer-events-none"
+            style={{
+              backgroundImage: 'radial-gradient(circle at 20px 20px, #047857 1.5px, transparent 2px)',
+              backgroundSize: '44px 44px'
+            }}
+          />
+
+          <div className="relative z-10 h-16 px-4 md:px-6 flex items-center justify-between border-b border-amber-200/70">
+            <h2 className="text-lg md:text-xl font-black text-emerald-900 uppercase tracking-tight flex items-center gap-2">
+              Khuyến mại hot mỗi ngày
+              <Flame className="w-5 h-5 text-orange-700 fill-orange-500" />
+            </h2>
+            <Link to="/products" className="flex items-center gap-2 text-emerald-900 font-bold text-sm hover:translate-x-1 transition-all">
               Xem tất cả <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
-            {promotionProducts.map(p => (
-              <ProductCard
-                key={p.id}
-                product={p}
-                onAddToCart={handleAddToCart}
-                adding={addingProductId === p.id}
-              />
-            ))}
+          <div className="relative z-10 p-4">
+            <button
+              type="button"
+              onClick={() => scrollPromotionProducts('left')}
+              className="hidden md:flex absolute left-4 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-12 h-12 items-center justify-center rounded-full bg-white/70 text-slate-700 shadow-lg hover:bg-white transition-all"
+              title="Xem sản phẩm trước"
+            >
+              <ArrowLeft className="w-6 h-6" />
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollPromotionProducts('right')}
+              className="hidden md:flex absolute right-4 top-1/2 translate-x-1/2 -translate-y-1/2 z-20 w-12 h-12 items-center justify-center rounded-full bg-white/70 text-slate-700 shadow-lg hover:bg-white transition-all"
+              title="Xem sản phẩm tiếp theo"
+            >
+              <ArrowRight className="w-6 h-6" />
+            </button>
+            <div
+              ref={promotionScrollerRef}
+              className="flex gap-3 overflow-x-auto scroll-smooth snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              {promotionProducts.map(p => (
+                <div key={p.id} className="snap-start shrink-0 w-[230px] md:w-[236px]">
+                  <PromoProductCard
+                    product={p}
+                    onAddToCart={handleAddToCart}
+                    adding={addingProductId === p.id}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        </section>
       )}
 
       {/* Categories Banner Section */}

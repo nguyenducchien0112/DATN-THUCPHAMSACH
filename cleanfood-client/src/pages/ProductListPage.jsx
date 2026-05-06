@@ -1,20 +1,21 @@
-﻿import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { ShoppingCart, SlidersHorizontal, ChevronRight } from 'lucide-react';
 import api from '../lib/axios';
-import useAuth from '../stores/useAuth';
 import useCart from '../stores/useCart';
 import toast from 'react-hot-toast';
 
 const ProductListPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
-  const { fetchCart, addToCart } = useCart();
+  const { addToCart } = useCart();
+  const ITEMS_PER_PAGE = 9;
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedPriceRange, setSelectedPriceRange] = useState(null);
+  const [sortBy, setSortBy] = useState('newest');
+  const [currentPage, setCurrentPage] = useState(1);
   const [addingProductId, setAddingProductId] = useState(null);
   
   const search = searchParams.get('search') || '';
@@ -39,14 +40,9 @@ const ProductListPage = () => {
     fetchData();
   }, [search, categoryId]);
 
-  const filteredProducts = products.filter(p => {
-    if (!selectedPriceRange) return true;
-    const price = p.price || 0;
-    if (selectedPriceRange === '0-50000') return price < 50000;
-    if (selectedPriceRange === '50000-200000') return price >= 50000 && price <= 200000;
-    if (selectedPriceRange === '200000+') return price > 200000;
-    return true;
-  });
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, categoryId, selectedPriceRange, sortBy]);
 
   const getDisplayPrice = (product) => {
     if (isPromotionActive(product) && Number(product.discountPercent) > 0) {
@@ -65,6 +61,50 @@ const ProductListPage = () => {
     return true;
   };
 
+  const getNewestValue = (product) => {
+    const dateValue = product.createdAt || product.updatedAt || product.createdDate || product.updatedDate;
+    const dateTime = dateValue ? new Date(dateValue).getTime() : 0;
+    return Number.isNaN(dateTime) || dateTime === 0 ? Number(product.id || 0) : dateTime;
+  };
+
+  const filteredProducts = useMemo(() => {
+    return products.filter(p => {
+      if (!selectedPriceRange) return true;
+      const price = getDisplayPrice(p);
+      if (selectedPriceRange === '0-50000') return price < 50000;
+      if (selectedPriceRange === '50000-200000') return price >= 50000 && price <= 200000;
+      if (selectedPriceRange === '200000+') return price > 200000;
+      return true;
+    });
+  }, [products, selectedPriceRange]);
+
+  const sortedProducts = useMemo(() => {
+    const sorted = [...filteredProducts];
+    if (sortBy === 'promotion') {
+      return sorted
+        .filter(isPromotionActive)
+        .sort((a, b) => getNewestValue(b) - getNewestValue(a));
+    }
+    if (sortBy === 'price-desc') {
+      return sorted.sort((a, b) => getDisplayPrice(b) - getDisplayPrice(a));
+    }
+    if (sortBy === 'price-asc') {
+      return sorted.sort((a, b) => getDisplayPrice(a) - getDisplayPrice(b));
+    }
+    return sorted.sort((a, b) => getNewestValue(b) - getNewestValue(a));
+  }, [filteredProducts, sortBy]);
+
+  const sortOptions = [
+    { value: 'newest', label: 'Mới nhất' },
+    { value: 'promotion', label: 'Sản phẩm khuyến mãi' },
+    { value: 'price-desc', label: 'Giá từ cao đến thấp' },
+    { value: 'price-asc', label: 'Giá từ thấp đến cao' }
+  ];
+
+  const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ITEMS_PER_PAGE));
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedProducts = sortedProducts.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
   const getProductImageUrl = (product) => {
     if (product?.images && product.images.length > 0 && product.images[0]?.url) {
       return `http://localhost:8080${product.images[0].url}`;
@@ -75,12 +115,7 @@ const ProductListPage = () => {
   const handleAddToCart = async (product) => {
     setAddingProductId(product.id);
     try {
-      if (!isAuthenticated) {
-        await addToCart(product.id, 1, product);
-      } else {
-        await api.post(`/cart/add?productId=${product.id}&quantity=1`);
-        await fetchCart();
-      }
+      await addToCart(product.id, 1, product);
       toast.success('Đã thêm sản phẩm vào giỏ hàng');
     } catch (err) {
       toast.error('Thêm vào giỏ hàng thất bại');
@@ -174,8 +209,18 @@ const ProductListPage = () => {
               <h2 className="text-2xl font-black text-slate-800 tracking-tight">
                 {search ? `Kết quả tìm kiếm cho "${search}"` : categoryId ? `Sản phẩm ${categories.find(c => c.id == categoryId)?.name || ''}` : 'Tất cả sản phẩm'}
               </h2>
-              <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-600 select-none">
-                 Sắp xếp: <span className="text-emerald-600 underline underline-offset-4 decoration-2">Mới nhất</span>
+              <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-600">
+                 <label htmlFor="product-sort" className="shrink-0">Sắp xếp:</label>
+                 <select
+                   id="product-sort"
+                   value={sortBy}
+                   onChange={(e) => setSortBy(e.target.value)}
+                   className="bg-transparent text-emerald-600 underline underline-offset-4 decoration-2 font-black focus:outline-none cursor-pointer"
+                 >
+                   {sortOptions.map(option => (
+                     <option key={option.value} value={option.value}>{option.label}</option>
+                   ))}
+                 </select>
               </div>
            </div>
 
@@ -185,19 +230,23 @@ const ProductListPage = () => {
                  <div key={i} className="aspect-[3/4] bg-slate-100 rounded-3xl animate-pulse"></div>
                ))}
              </div>
-           ) : filteredProducts.length === 0 ? (
+           ) : sortedProducts.length === 0 ? (
              <div className="bg-slate-50 border border-slate-100 rounded-3xl p-20 text-center">
-                <p className="text-slate-500 font-bold">Không tìm thấy sản phẩm nào phù hợp với bộ lọc giá của bạn.</p>
+                <p className="text-slate-500 font-bold">Không tìm thấy sản phẩm nào phù hợp với lựa chọn của bạn.</p>
                 <button 
-                  onClick={() => setSelectedPriceRange(null)}
+                  onClick={() => {
+                    setSelectedPriceRange(null);
+                    setSortBy('newest');
+                  }}
                   className="mt-4 text-emerald-600 font-black text-sm hover:underline"
                  >
-                    Xóa bộ lọc giá
+                    Xóa bộ lọc
                  </button>
              </div>
            ) : (
+             <>
              <div className="grid grid-cols-2 lg:grid-cols-3 gap-8">
-                {filteredProducts.map(p => (
+                {paginatedProducts.map(p => (
                    <div key={p.id} className="h-full bg-white rounded-3xl border border-slate-100 overflow-hidden group hover:shadow-xl hover:shadow-emerald-500/5 transition-all flex flex-col">
                       <Link to={`/products/${p.id}`} className="block aspect-[4/5] relative overflow-hidden bg-slate-50">
                         <img 
@@ -237,6 +286,41 @@ const ProductListPage = () => {
                    </div>
                 ))}
              </div>
+             {totalPages > 1 && (
+               <div className="flex items-center justify-center gap-2 mt-10">
+                 <button
+                   type="button"
+                   onClick={() => setCurrentPage(page => Math.max(1, page - 1))}
+                   disabled={currentPage === 1}
+                   className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-black text-slate-600 hover:text-emerald-600 hover:border-emerald-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                 >
+                   Trước
+                 </button>
+                 {Array.from({ length: totalPages }, (_, index) => index + 1).map(page => (
+                   <button
+                     key={page}
+                     type="button"
+                     onClick={() => setCurrentPage(page)}
+                     className={`w-10 h-10 rounded-xl text-sm font-black transition-all ${
+                       currentPage === page
+                         ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100'
+                         : 'bg-white border border-slate-200 text-slate-600 hover:text-emerald-600 hover:border-emerald-200'
+                     }`}
+                   >
+                     {page}
+                   </button>
+                 ))}
+                 <button
+                   type="button"
+                   onClick={() => setCurrentPage(page => Math.min(totalPages, page + 1))}
+                   disabled={currentPage === totalPages}
+                   className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-black text-slate-600 hover:text-emerald-600 hover:border-emerald-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                 >
+                   Sau
+                 </button>
+               </div>
+             )}
+             </>
            )}
         </div>
       </div>

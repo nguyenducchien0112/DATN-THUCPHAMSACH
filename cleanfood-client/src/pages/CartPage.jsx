@@ -8,11 +8,10 @@ import toast from 'react-hot-toast';
 
 const CartPage = () => {
   const { isAuthenticated } = useAuth();
-  const { cartItems, fetchCart, updateQuantity: updateCartQuantity, removeFromCart, clearCart } = useCart();
+  const { cartItems, fetchCart, updateQuantity: updateCartQuantity, removeFromCart } = useCart();
   const [loading, setLoading] = useState(true);
   const [checkoutStep, setCheckoutStep] = useState(1);
   const [address, setAddress] = useState({ fullName: '', phone: '', detail: '' });
-  const [guestEmail, setGuestEmail] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('vnpay');
   const location = useLocation();
   const navigate = useNavigate();
@@ -44,10 +43,15 @@ const CartPage = () => {
 
   useEffect(() => {
     if (location.state?.directCheckout && cartItems.length > 0) {
+      if (!isAuthenticated) {
+        toast.error('Vui lòng đăng nhập để thanh toán');
+        navigate('/login', { state: { from: location.pathname } });
+        return;
+      }
       setCheckoutStep(2);
       navigate(location.pathname, { replace: true, state: {} });
     }
-  }, [location.state, location.pathname, cartItems.length, navigate]);
+  }, [location.state, location.pathname, cartItems.length, isAuthenticated, navigate]);
 
   const updateQuantity = async (id, newQty) => {
     if (newQty < 1) return;
@@ -69,46 +73,47 @@ const CartPage = () => {
     }
   };
 
-  const subtotal = cartItems.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
+  const isPromotionActive = (product) => {
+    if (Number(product?.discountPercent) <= 0) return false;
+    const today = new Date().toISOString().slice(0, 10);
+    const start = product.promotionStartDate;
+    const end = product.promotionEndDate;
+    if (start && today < start) return false;
+    if (end && today > end) return false;
+    return true;
+  };
+
+  const getDisplayPrice = (product) => {
+    if (isPromotionActive(product) && Number(product?.discountedPrice) > 0) {
+      return Number(product.discountedPrice);
+    }
+    return Number(product?.price || 0);
+  };
+
+  const subtotal = cartItems.reduce((acc, item) => acc + getDisplayPrice(item.product) * item.quantity, 0);
   const shipping = subtotal > 500000 ? 0 : 30000;
   const total = subtotal + shipping;
 
   const shippingAddress = `${address.fullName} - ${address.phone} - ${address.detail}`;
 
   const handleVNPayPayment = async () => {
-    if (!isAuthenticated && !guestEmail.trim()) {
-      toast.error('Vui lòng nhập email nhận hóa đơn');
+    if (!isAuthenticated) {
+      toast.error('Vui lòng đăng nhập để thanh toán');
+      navigate('/login', { state: { from: location.pathname } });
       return;
     }
 
     setLoading(true);
     try {
-      if (isAuthenticated) {
-        const res = await api.get('/payment/create-vnpay-payment', {
-          params: { shippingAddress }
-        });
-        if (res.data.url) {
-          if (res.data.orderId) {
-            sessionStorage.setItem('pendingOrderId', res.data.orderId);
-          }
-          window.location.href = res.data.url;
-          return;
-        }
-      } else {
-        const requestBody = {
-          guestEmail,
-          shippingAddress,
-          cartItems: cartItems.map(item => ({
-            productId: item.product?.id || item.productId,
-            quantity: item.quantity
-          }))
-        };
-        const res = await api.post('/payment/create-guest-vnpay-payment', requestBody);
-        if (res.data.url) {
+      const res = await api.get('/payment/create-vnpay-payment', {
+        params: { shippingAddress }
+      });
+      if (res.data.url) {
+        if (res.data.orderId) {
           sessionStorage.setItem('pendingOrderId', res.data.orderId);
-          window.location.href = res.data.url;
-          return;
         }
+        window.location.href = res.data.url;
+        return;
       }
       setLoading(false);
     } catch {
@@ -118,40 +123,26 @@ const CartPage = () => {
   };
 
   const handleCodPayment = async () => {
+    if (!isAuthenticated) {
+      toast.error('Vui lòng đăng nhập để thanh toán');
+      navigate('/login', { state: { from: location.pathname } });
+      return;
+    }
+
     if (!address.fullName || !address.phone || !address.detail) {
       toast.error('Vui lòng nhập đầy đủ thông tin giao hàng');
       return;
     }
 
-    if (!isAuthenticated && !guestEmail.trim()) {
-      toast.error('Vui lòng nhập email nhận hóa đơn');
-      return;
-    }
-
     setLoading(true);
     try {
-      if (isAuthenticated) {
-        const res = await api.post('/orders/create-cod-order', { shippingAddress });
-        if (res.data?.orderId) {
-          api.post('/auth/send-invoice', { orderId: res.data.orderId }).catch(console.error);
-        }
-        await fetchCart();
-        toast.success('Đặt hàng COD thành công');
-        navigate('/my-orders');
-      } else {
-        const requestBody = {
-          guestEmail,
-          shippingAddress,
-          cartItems: cartItems.map(item => ({
-            productId: item.product?.id || item.productId,
-            quantity: item.quantity
-          }))
-        };
-        const res = await api.post('/auth/create-guest-cod-order', requestBody);
-        await clearCart();
-        toast.success(res.data?.message || 'Đặt hàng COD thành công. Hóa đơn sẽ được gửi đến email.');
-        navigate('/');
+      const res = await api.post('/orders/create-cod-order', { shippingAddress });
+      if (res.data?.orderId) {
+        api.post('/auth/send-invoice', { orderId: res.data.orderId }).catch(console.error);
       }
+      await fetchCart();
+      toast.success('Đặt hàng COD thành công');
+      navigate('/my-orders');
     } catch (error) {
       const message = error?.response?.data?.message || 'Đặt hàng COD thất bại';
       toast.error(message);
@@ -190,7 +181,11 @@ const CartPage = () => {
               <h2 className="text-3xl font-black text-slate-800 tracking-tight">Giỏ hàng của bạn ({cartItems.length})</h2>
               <div className="bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-sm">
                 <div className="divide-y divide-slate-100">
-                  {cartItems.map((item) => (
+                  {cartItems.map((item) => {
+                    const unitPrice = getDisplayPrice(item.product);
+                    const hasDiscount = isPromotionActive(item.product) && unitPrice < Number(item.product?.price || 0);
+
+                    return (
                     <div key={item.id} className="p-6 flex gap-6 items-center group">
                       <img
                         src={item.product.images && item.product.images.length > 0 ? `http://localhost:8080${item.product.images[0].url}` : 'https://images.unsplash.com/photo-1543362906-acfc16c67564?auto=format&fit=crop&q=80&w=200'}
@@ -207,13 +202,18 @@ const CartPage = () => {
                             <button onClick={() => updateQuantity(item.id, item.quantity + 1)} className="w-8 h-8 flex items-center justify-center hover:bg-white hover:text-emerald-600 rounded-lg transition-all text-slate-500"><Plus className="w-4 h-4" /></button>
                           </div>
                           <div className="text-right">
-                            <p className="text-emerald-600 font-black">{(item.product.price * item.quantity).toLocaleString()} d</p>
+                            {hasDiscount && (
+                              <p className="text-xs text-slate-400 font-bold line-through">
+                                {(Number(item.product.price || 0) * item.quantity).toLocaleString()} d
+                              </p>
+                            )}
+                            <p className="text-emerald-600 font-black">{(unitPrice * item.quantity).toLocaleString()} d</p>
                             <button onClick={() => removeItem(item.id)} className="text-[10px] font-black text-rose-500 uppercase tracking-widest hover:underline mt-1">Xóa khỏi giỏ</button>
                           </div>
                         </div>
                       </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
               </div>
             </>
@@ -268,20 +268,6 @@ const CartPage = () => {
                     ></textarea>
                   </div>
                 </div>
-                {!isAuthenticated && (
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest pl-1">Email nhận hóa đơn</label>
-                    <div className="relative">
-                      <input
-                        type="email"
-                        placeholder="your-email@gmail.com"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-4 pr-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all"
-                        value={guestEmail}
-                        onChange={(e) => setGuestEmail(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div>
@@ -319,7 +305,7 @@ const CartPage = () => {
                       </div>
                       <div>
                         <p className="text-sm font-black text-slate-800">Thanh toán (COD)</p>
-                        <p className="text-[11px] font-bold text-slate-600 uppercase tracking-tight">Dành cho khách hàng có hoặc chưa đăng nhập</p>
+                        <p className="text-[11px] font-bold text-slate-600 uppercase tracking-tight">Yêu cầu đăng nhập</p>
                       </div>
                     </div>
                     {paymentMethod === 'cod' && <CheckCircle2 className="w-6 h-6 text-emerald-600" />}
@@ -358,7 +344,14 @@ const CartPage = () => {
 
             {checkoutStep === 1 ? (
               <button
-                onClick={() => setCheckoutStep(2)}
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    toast.error('Vui lòng đăng nhập để thanh toán');
+                    navigate('/login', { state: { from: location.pathname } });
+                    return;
+                  }
+                  setCheckoutStep(2);
+                }}
                 className="w-full py-4 bg-slate-800 text-white rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-slate-900 transition-all shadow-lg"
               >
                 Tiến hành đặt hàng
@@ -370,7 +363,7 @@ const CartPage = () => {
                 disabled={!address.fullName || !address.phone || !address.detail}
                 className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 disabled:opacity-50 disabled:grayscale"
               >
-                {paymentMethod === 'cod' ? 'Thanh toán ngay' : 'Thanh toán ngay'}
+                {paymentMethod === 'cod' ? 'Đặt hàng COD' : 'Thanh toán ngay'}
                 <CreditCard className="w-5 h-5" />
               </button>
             )}

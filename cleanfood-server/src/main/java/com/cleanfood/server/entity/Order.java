@@ -15,33 +15,36 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class Order {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = true)
     private User customer;
-
     private String guestEmail;
-
     private LocalDateTime orderDate;
-
     @Column(nullable = false)
     private BigDecimal totalAmount;
-
     @Enumerated(EnumType.STRING)
     private OrderStatus status;
-
     private String shippingAddress;
     private String paymentMethod;
-
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean paid = false;
+    @Column(name = "stock_deducted", nullable = false)
+    @Builder.Default
+    private Boolean stockDeducted = false;
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL)
     private List<OrderItem> items;
-
     @PrePersist
     protected void onCreate() {
         orderDate = LocalDateTime.now();
+        if (paid == null) {
+            paid = false;
+        }
+        if (stockDeducted == null) {
+            stockDeducted = false;
+        }
     }
 }

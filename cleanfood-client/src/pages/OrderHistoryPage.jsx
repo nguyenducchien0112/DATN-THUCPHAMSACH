@@ -7,14 +7,18 @@ import {
   Calendar,
   ChevronRight,
   ShoppingBag,
-  ArrowLeft
+  ArrowLeft,
+  Trash2
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../lib/axios';
+import toast from 'react-hot-toast';
 
 const OrderHistoryPage = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
 
   const statusMap = {
     'PENDING': { label: 'Chờ xác nhận', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-100', icon: Clock },
@@ -35,6 +39,22 @@ const OrderHistoryPage = () => {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCancelOrder = async (orderId) => {
+    if (!window.confirm('Bạn chắc chắn muốn hủy đơn hàng này?')) return;
+    setCancelling(true);
+    try {
+      const res = await api.put(`/orders/${orderId}/cancel`);
+      setOrders((prev) => prev.map((order) => (order.id === orderId ? res.data : order)));
+      setSelectedOrder(res.data);
+      toast.success('Đã hủy đơn hàng');
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Hủy đơn hàng thất bại';
+      toast.error(message);
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -90,7 +110,14 @@ const OrderHistoryPage = () => {
                           <StatusIcon className="w-3.5 h-3.5" />
                           {status.label}
                        </span>
-                       <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-emerald-500 transition-colors" />
+                       <button
+                         type="button"
+                         onClick={() => setSelectedOrder(order)}
+                         className="p-2 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 rounded-xl transition-colors"
+                         title="Xem chi tiết đơn hàng"
+                       >
+                         <ChevronRight className="w-5 h-5" />
+                       </button>
                     </div>
                  </div>
                  
@@ -106,6 +133,96 @@ const OrderHistoryPage = () => {
             );
           })}
         </div>
+      )}
+
+      {selectedOrder && (
+        (() => {
+          const status = statusMap[selectedOrder.status] || statusMap.PENDING;
+          const StatusIcon = status.icon;
+          const canCancel = selectedOrder.status === 'PENDING';
+
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setSelectedOrder(null)}></div>
+              <div className="relative w-full max-w-2xl bg-white rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                <div className="p-6 md:p-8 bg-slate-50/70 border-b border-slate-100 flex items-start justify-between gap-6">
+                  <div>
+                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Chi tiết đơn hàng</p>
+                    <h2 className="text-2xl font-black text-slate-800">Đơn hàng #{selectedOrder.id}</h2>
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[11px] font-black uppercase tracking-tight ${status.bg} ${status.text} ${status.border}`}>
+                        <StatusIcon className="w-3.5 h-3.5" />
+                        {status.label}
+                      </span>
+                      <span className="text-xs font-bold text-slate-400">
+                        {new Date(selectedOrder.orderDate).toLocaleDateString('vi-VN')}
+                      </span>
+                    </div>
+                  </div>
+                  <button onClick={() => setSelectedOrder(null)} className="text-slate-400 hover:text-slate-700">
+                    <XCircle className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="p-6 md:p-8 space-y-8 max-h-[65vh] overflow-y-auto">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5">
+                      <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2">Thanh toán</p>
+                      <p className="text-2xl font-black text-emerald-600">{(selectedOrder.totalAmount || 0).toLocaleString()} đ</p>
+                      <p className="text-xs font-bold text-slate-400 mt-1">{selectedOrder.paymentMethod || 'N/A'}</p>
+                    </div>
+                    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5">
+                      <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2">Địa chỉ giao hàng</p>
+                      <p className="text-sm font-bold text-slate-700 leading-relaxed">{selectedOrder.shippingAddress || 'N/A'}</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Sản phẩm</p>
+                    <div className="border border-slate-100 rounded-2xl overflow-hidden divide-y divide-slate-100">
+                      {selectedOrder.items?.map((item, idx) => {
+                        const imgUrl = item.product?.images?.[0]?.url
+                          ? `http://localhost:8080${item.product.images[0].url}`
+                          : 'https://images.unsplash.com/photo-1543362906-acfc16c67564?auto=format&fit=crop&q=80&w=200';
+                        return (
+                          <div key={idx} className="p-4 flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-4 min-w-0">
+                              <img src={imgUrl} alt={item.product?.name || 'Sản phẩm'} className="w-12 h-12 rounded-xl object-cover border border-slate-100" />
+                              <div className="min-w-0">
+                                <p className="text-sm font-black text-slate-800 truncate">{item.product?.name || 'Sản phẩm'}</p>
+                                <p className="text-xs font-bold text-slate-400">{item.quantity} x {(item.price || 0).toLocaleString()} đ</p>
+                              </div>
+                            </div>
+                            <p className="text-sm font-black text-slate-700 shrink-0">{(Number(item.quantity || 0) * Number(item.price || 0)).toLocaleString()} đ</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-6 md:p-8 bg-slate-50/70 border-t border-slate-100 flex flex-col md:flex-row justify-end gap-3">
+                  {canCancel && (
+                    <button
+                      onClick={() => handleCancelOrder(selectedOrder.id)}
+                      disabled={cancelling}
+                      className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-rose-600 text-white rounded-2xl font-black hover:bg-rose-700 transition-all disabled:opacity-60"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      {cancelling ? 'Đang hủy...' : 'Hủy đơn hàng'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setSelectedOrder(null)}
+                    className="px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl font-black hover:bg-slate-50 transition-all"
+                  >
+                    Đóng
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()
       )}
     </div>
   );

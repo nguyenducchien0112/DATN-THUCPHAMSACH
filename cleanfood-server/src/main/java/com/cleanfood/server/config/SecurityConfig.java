@@ -37,7 +37,6 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/api/auth/**",
                     "/api/public/**",
-                    "/api/payment/create-guest-vnpay-payment",
                     "/uploads/**"
                 ).permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")

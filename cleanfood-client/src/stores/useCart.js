@@ -42,6 +42,7 @@ const useCart = create((set, get) => ({
     } catch (err) {
       console.error('Failed to fetch cart:', err);
       set({ loading: false });
+      throw err;
     }
   },
 
@@ -67,10 +68,12 @@ const useCart = create((set, get) => ({
     }
 
     try {
-      const res = await api.post('/cart/add', null, { params: { productId, quantity } });
-      set(state => ({ cartItems: [...state.cartItems, res.data] }));
+      await api.post('/cart/add', null, { params: { productId, quantity } });
+      const res = await api.get('/cart');
+      set({ cartItems: res.data });
     } catch (err) {
       console.error('Failed to add to cart:', err);
+      throw err;
     }
   },
 
@@ -95,6 +98,7 @@ const useCart = create((set, get) => ({
       }));
     } catch (err) {
       console.error('Failed to update quantity:', err);
+      throw err;
     }
   },
 
@@ -113,6 +117,7 @@ const useCart = create((set, get) => ({
       set(state => ({ cartItems: state.cartItems.filter(item => item.id !== id) }));
     } catch (err) {
       console.error('Failed to remove from cart:', err);
+      throw err;
     }
   },
 
@@ -129,6 +134,7 @@ const useCart = create((set, get) => ({
       set({ cartItems: [] });
     } catch (err) {
       console.error('Failed to clear cart:', err);
+      throw err;
     }
   },
 }));

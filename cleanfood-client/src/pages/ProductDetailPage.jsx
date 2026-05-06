@@ -14,15 +14,13 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import api from '../lib/axios';
-import useAuth from '../stores/useAuth';
 import useCart from '../stores/useCart';
 import toast from 'react-hot-toast';
 
 const ProductDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
-  const { fetchCart, addToCart } = useCart();
+  const { addToCart } = useCart();
   
   const [product, setProduct] = useState(null);
   const [quantity, setQuantity] = useState(1);
@@ -72,12 +70,7 @@ const ProductDetailPage = () => {
 
     setAdding(true);
     try {
-      if (!isAuthenticated) {
-        await addToCart(product.id, quantity, product);
-      } else {
-        await api.post(`/cart/add?productId=${id}&quantity=${quantity}`);
-        await fetchCart();
-      }
+      await addToCart(product.id, quantity, product);
       toast.success('Đã thêm sản phẩm vào giỏ hàng!');
     } catch (err) {
       toast.error('Thêm vào giỏ hàng thất bại');

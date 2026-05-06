@@ -16,6 +16,7 @@ import com.cleanfood.server.repository.UserRepository;
 import com.cleanfood.server.security.JwtUtils;
 import com.cleanfood.server.service.OrderService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -142,35 +143,8 @@ public class AuthController {
 
     @PostMapping("/create-guest-cod-order")
     public ResponseEntity<Map<String, Object>> createGuestCodOrder(@RequestBody Map<String, Object> request) {
-        String guestEmail = (String) request.get("guestEmail");
-        String shippingAddress = (String) request.get("shippingAddress");
-        List<Map<String, Object>> cartItems = (List<Map<String, Object>>) request.get("cartItems");
-
-        if (guestEmail == null || guestEmail.isBlank() || shippingAddress == null || shippingAddress.isBlank() || cartItems == null || cartItems.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Vui lòng cung cấp email, địa chỉ và giỏ hàng"));
-        }
-
-        List<OrderItem> items = cartItems.stream().map(item -> {
-            Long productId = Long.valueOf(item.get("productId").toString());
-            Integer quantity = Integer.valueOf(item.get("quantity").toString());
-            Product product = productRepository.findById(productId)
-                    .orElseThrow(() -> new RuntimeException("Product not found"));
-            return OrderItem.builder()
-                    .product(product)
-                    .quantity(quantity)
-                    .price(product.getPrice())
-                    .build();
-        }).collect(Collectors.toList());
-
-        Order order = orderService.createGuestOrder(guestEmail, shippingAddress, "COD", items);
-        try {
-            sendInvoiceEmail(guestEmail, order);
-        } catch (MailException ex) {
-            ex.printStackTrace();
-            return ResponseEntity.ok(Map.of("message", "Đặt hàng COD thành công. Hóa đơn sẽ được gửi khi hệ thống mail hoạt động.", "orderId", order.getId()));
-        }
-
-        return ResponseEntity.ok(Map.of("message", "Đặt hàng COD thành công. Hóa đơn đã được gửi đến email của bạn.", "orderId", order.getId()));
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("message", "Vui lòng đăng nhập để thanh toán"));
     }
 
     @PostMapping("/send-invoice")
